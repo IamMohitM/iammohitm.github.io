@@ -21,13 +21,13 @@ footer-links:
   email: mohitmotwani54@gmail.com
   facebook:
   flickr:
-  github: https://github.com/IamMohitM/
+  github: IamMohitM
   instagram:
-  linkedin: https://www.linkedin.com/in/mohitmotwani/
+  linkedin: mohitmotwani
   pinterest:
   rss: # just type anything here for a working RSS icon
   twitter: jekyllrb
-  stackoverflow: https://stackoverflow.com/users/story/8727339
+  stackoverflow: users/story/8727339
   youtube: # channel/<your_long_string> or user/<user-name>
   googleplus: # anything in your profile username that comes after plus.google.com/
 
