@@ -14,7 +14,7 @@ Image Segmentation is the process of segmenting an image into sementaic regions,
 Look at the following examples:
 
 
-{% include image.html url="/images/semantic-segmentation-examples.webp" description="Source - https://www.learnopencv.com/applications-of-foreground-background-separation-with-semantic-segmentation/" %}
+{% include image.html url="/images/semantic-segmentation-examples.png" description="Source - https://www.learnopencv.com/applications-of-foreground-background-separation-with-semantic-segmentation/" %}
 
 
 Now this might be a very trivial task for the human brain, but no so easy for the computer. 
