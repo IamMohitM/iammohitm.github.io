@@ -151,11 +151,7 @@ I have used a [Disjoint Forest](https://helloacm.com/disjoint-sets/) to represen
 **DisjointForest.h**
 
 {% highlight cpp %}
-#ifndef STD_VECTOR
-#define STD_VECTOR
 #include <vector>
-
-#endif
 
 struct Component;
 struct ComponentStruct;
@@ -188,7 +184,7 @@ struct ComponentStruct{
     ComponentStruct* nextComponentStruct= nullptr;
 };
 
-Component* makeComponent(int row, int col, int intensity);
+<!-- Component* makeComponent(const int row, const int col, const int intensity); -->
 Edge* createEdge(Pixel* pixel1, Pixel* pixel2);
 void mergeComponents(Component* x, Component* y, double MSTMaxEdgeValue);
 {% endhighlight %}
@@ -216,7 +212,7 @@ Component* makeComponent(const int row, const int column, const int intensity){
     pixel->parent = pixel;
     pixel->parentTree = component;
     component->representative = pixel;
-    component->pixels.push_back(pixel);
+<!--     component->pixels.push_back(pixel); -->
     return component;
 }
 
@@ -284,15 +280,12 @@ void mergeComponents(Component* x, Component* y, double MSTMaxEdgeValue){
     
 **utils.h**
 {% highlight cpp %}
-int getSingleIndex( int row,int col,int totalColumns);
-void quickSort(Edge** &edges, int startingIndex, int lastIndex, int &count);
-int getRandomNumber(int min, int max);
-int getEdgeArraySize(int rows, int columns);
-std::vector<Edge*>& setEdges(const cv::Mat &img, std::vector<Pixel *> &pixels, std::vector<Edge*> &edges);
-bool compareEdges(Edge* e1, Edge* e2);
-cv::Mat addColorToSegmentation(ComponentStruct* componentStruct, int rows, int columns);
-std::string getFileNameFromPath(std::string &path);
-std::vector<Pixel *>& constructImageGraph(cv::Mat& img, std::vector<Pixel *> &pixels, int rows, int columns);
+int getSingleIndex(const int row, const int col, const int totalColumns);
+int getEdgeArraySize(const int rows, const int columns);
+std::vector<Edge*>& setEdges(const cv::Mat &img, const std::vector<Pixel *> &pixels, std::vector<Edge*> &edges);
+bool compareEdges(const Edge* e1,const Edge* e2);
+cv::Mat addColorToSegmentation(const ComponentStruct* componentStruct, int rows, int columns);
+std::vector<Pixel *>& constructImageGraph(const cv::Mat& img, std::vector<Pixel *> &pixels, int rows, int columns);
 {% endhighlight %}
 
 **utils.cpp**
@@ -307,29 +300,7 @@ int getSingleIndex(const int row,const int col,const int totalColumns){
     return (row*totalColumns) + col;
 }
 
-std::vector<std::string> split(const std::string& s, char seperator)
-{
-    std::vector<std::string> output;
-    std::string::size_type prev_pos = 0, pos = 0;
-    while((pos = s.find(seperator, pos)) != std::string::npos)
-    {
-        std::string substring( s.substr(prev_pos, pos-prev_pos) );
-        output.push_back(substring);
-        prev_pos = ++pos;
-    }
-    output.push_back(s.substr(prev_pos, pos-prev_pos)); // Last word
-    return output;
-}
-
-std::string getFileNameFromPath(std::string &path){
-    std::vector<std::string> pathSplit = split(path, '/');
-    std::string fileName = pathSplit[pathSplit.size()-1];
-    std::vector<std::string> fileNameSplit = split(fileName, '.');
-    std::string baseFileName = fileNameSplit[0];
-    return baseFileName;
-}
-
-int getEdgeArraySize(int rows, int columns){
+int getEdgeArraySize(const int rows,const int columns){
     int firstColumn = 3 * (rows-1);
     int lastColumn = 2 * (rows - 1);
     int middleValues = 4 * (rows - 1 ) * (columns - 2);
@@ -337,7 +308,7 @@ int getEdgeArraySize(int rows, int columns){
     return firstColumn + lastColumn + middleValues + lastRow;
 }
 
-std::vector<Pixel *>& constructImageGraph(cv::Mat& img, std::vector<Pixel *> &pixels, int rows, int columns){
+std::vector<Pixel *>& constructImageGraph(const cv::Mat& img, std::vector<Pixel *> &pixels, int rows, int columns){
     Component* firstComponent = makeComponent(0, 0, static_cast<int>(img.at<uchar>(0, 0)));
     auto* firstComponentStruct = new ComponentStruct;
     firstComponentStruct->component = firstComponent;
@@ -366,7 +337,7 @@ std::vector<Pixel *>& constructImageGraph(cv::Mat& img, std::vector<Pixel *> &pi
     return pixels;
 }
 
-std::vector<Edge *>& setEdges(const cv::Mat &img, std::vector<Pixel *> &pixels, std::vector<Edge*> &edges){
+std::vector<Edge *>& setEdges(const const cv::Mat &img,const std::vector<Pixel *> &pixels, std::vector<Edge*> &edges){
     int rows = img.rows;
     int columns = img.cols;
     int edgeCount = 0;
@@ -400,11 +371,11 @@ std::vector<Edge *>& setEdges(const cv::Mat &img, std::vector<Pixel *> &pixels, 
     return edges;
 }
 
-bool compareEdges(Edge* e1, Edge* e2){
+bool compareEdges(const Edge* e1,const Edge* e2){
     return e1->weight < e2->weight;
 }
 
-int getRandomNumber(int min, int max)
+int getRandomNumber(const int min, const int max)
 {
     //from learncpp.com
     static constexpr double fraction { 1.0 / (RAND_MAX + 1.0) };
@@ -412,7 +383,7 @@ int getRandomNumber(int min, int max)
 }
 
 
-cv::Mat addColorToSegmentation(ComponentStruct* componentStruct, int rows, int columns){
+cv::Mat addColorToSegmentation(const ComponentStruct* componentStruct, int rows, int columns){
     cv::Mat segmentedImage(rows, columns, CV_8UC3);
     do{
         uchar r=getRandomNumber(0, 255);
@@ -441,7 +412,7 @@ cv::Mat addColorToSegmentation(ComponentStruct* componentStruct, int rows, int c
 
 **segmentation.h**
 {% highlight cpp %}
-void segmentImage(std::vector<Edge *> &edges, int &totalComponents, int minimumComponentSize, float kValue) ;
+void segmentImage(const std::vector<Edge *> &edges, int &totalComponents, int minimumComponentSize, float kValue) ;
 {% endhighlight %}
 
 **segmentation.cpp**
@@ -450,11 +421,11 @@ void segmentImage(std::vector<Edge *> &edges, int &totalComponents, int minimumC
 #include <vector>
 #include "DisjointForest.h"
 
-inline float thresholdFunction(float componentSize, float k){
+inline float thresholdFunction(const float componentSize, const float k){
     return k/componentSize;
 }
 
-void segmentImage(std::vector<Edge *> &edges, int &totalComponents, int minimumComponentSize, float kValue) {
+void segmentImage(const std::vector<Edge *> &edges, int &totalComponents, int minimumComponentSize, float kValue) {
     std::cout << "Starting Segmentation:\n";
     Pixel* pixel1;
     Pixel* pixel2;
@@ -517,6 +488,7 @@ Note that the MSTMaxEdge represents the maximum edge for the minimum Spanning Tr
 #include <iostream>
 #include <vector>
 #include <string>
+#include <filesystem>
 #include <opencv2/opencv.hpp>
 #include "DisjointForest.h"
 #include "utils.h"
@@ -527,11 +499,11 @@ int main() {
     int minimumComponentSize = 100;
     float kValue = 850;
     int flag = cv::IMREAD_GRAYSCALE;
-    std::string inputPath =  "images/baseball.png"; //Add path to the input image
-
+    
+    std::filesystem::path path = std::filesystem::u8path("images/baseball.png");
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
 
-    cv::Mat img = cv::imread(inputPath, flag);
+    cv::Mat img = cv::imread(path, flag);
     std::cout << img.size() << '\n';
     //Gaussian filter applie to slightly smooth the image
     cv::GaussianBlur(img, img, cv::Size(3,3), gaussianBlur);
