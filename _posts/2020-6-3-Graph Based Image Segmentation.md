@@ -184,7 +184,7 @@ struct ComponentStruct{
     ComponentStruct* nextComponentStruct= nullptr;
 };
 
-<!-- Component* makeComponent(const int row, const int col, const int intensity); -->
+Component* makeComponent(const int row, const int col, const int intensity);
 Edge* createEdge(Pixel* pixel1, Pixel* pixel2);
 void mergeComponents(Component* x, Component* y, double MSTMaxEdgeValue);
 {% endhighlight %}
@@ -212,7 +212,7 @@ Component* makeComponent(const int row, const int column, const int intensity){
     pixel->parent = pixel;
     pixel->parentTree = component;
     component->representative = pixel;
-<!--     component->pixels.push_back(pixel); -->
+    component->pixels.push_back(pixel);
     return component;
 }
 
