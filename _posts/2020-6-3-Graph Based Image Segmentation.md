@@ -127,7 +127,7 @@ We start with the initial setup where each pixel is its own componets and $Int(C
 
 ### Implementation
 
-I will only be showing the implementation for gray scale images, that means only using gray scale values of the image to measure weight. However, only minor changes are required to consider RGB values. You can access my entire [Github Repo](https://github.com/IamMohitM/Graph-Based-Image-Segmentation) for the RGB implementation.   
+You can access my entire [Github Repo](https://github.com/IamMohitM/Graph-Based-Image-Segmentation) for the most recent updates.
 
 Here's my cmake file:
 ```
@@ -151,7 +151,10 @@ I have used a [Disjoint Forest](https://helloacm.com/disjoint-sets/) to represen
 **DisjointForest.h**
 
 {% highlight cpp %}
+#pragma once
 #include <vector>
+#include <functional>
+#include <opencv2/opencv.hpp>
 
 struct Component;
 struct ComponentStruct;
@@ -160,6 +163,9 @@ struct Pixel{
     Component* parentTree;
     Pixel* parent;
     int intensity;
+    int bValue;
+    int gValue;
+    int rValue;
     int row;
     int column;
 };
@@ -184,9 +190,11 @@ struct ComponentStruct{
     ComponentStruct* nextComponentStruct= nullptr;
 };
 
-Component* makeComponent(const int row, const int col, const int intensity);
-Edge* createEdge(Pixel* pixel1, Pixel* pixel2);
+Edge* createEdge(Pixel* pixel1, Pixel* pixel2,  std::function<double(Pixel*, Pixel*)> edgeDifferenceFunction);
+double rgbPixelDifference(Pixel* pixel1, Pixel* pixel2);
+double grayPixelDifference(Pixel* pixel1, Pixel* pixel2);
 void mergeComponents(Component* x, Component* y, double MSTMaxEdgeValue);
+Component* makeComponent(const int row, const int column, cv::Vec3b pixelValues);
 {% endhighlight %}
 
 {% include image.html url="/images/DisjointForestDataStructure.png" description="Each component is pointed by an element of a linked list which is represented by ComponentStruct. This linked list is necessary to remember the resulting components through out the program." %}
@@ -203,10 +211,13 @@ void mergeComponents(Component* x, Component* y, double MSTMaxEdgeValue);
 #include <iostream>
 #include <cmath>
 
-Component* makeComponent(const int row, const int column, const int intensity){
+Component* makeComponent(const int row, const int column, cv::Vec3b pixelValues){
     auto* component = new Component;
     auto* pixel = new Pixel;
-    pixel->intensity = intensity;
+    pixel->bValue = pixelValues.val[0];
+    pixel->gValue = pixelValues.val[1];
+    pixel->rValue = pixelValues.val[2];
+    pixel->intensity = (pixelValues.val[0] + pixelValues.val[1] + pixelValues.val[2])/3;
     pixel->row = row;
     pixel->column = column;
     pixel->parent = pixel;
@@ -216,10 +227,6 @@ Component* makeComponent(const int row, const int column, const int intensity){
     return component;
 }
 
-inline Component* findSet(Pixel* node){
-    return node->parentTree;
-}
-
 void setParentTree(Component* childTreePointer, Component* parentTreePointer){
     for(Pixel* nodePointer: childTreePointer->pixels){
         parentTreePointer->pixels.push_back(nodePointer);
@@ -227,15 +234,25 @@ void setParentTree(Component* childTreePointer, Component* parentTreePointer){
     }
 }
 
-Edge* createEdge(Pixel* pixel1, Pixel* pixel2){
+double grayPixelDifference(Pixel* pixel1, Pixel* pixel2){
+    return abs(pixel1->intensity - pixel2->intensity);
+}
+
+double rgbPixelDifference(Pixel* pixel1, Pixel* pixel2){
+    return sqrt(pow(pixel1->rValue- pixel2->rValue, 2 ) +
+                pow(pixel1->bValue- pixel2->bValue, 2) +
+                pow(pixel1->gValue- pixel2->gValue, 2));
+}
+
+Edge* createEdge(Pixel* pixel1, Pixel* pixel2,  std::function<double(Pixel*, Pixel*)> edgeDifferenceFunction){
     Edge* edge = new Edge;
-    edge->weight = abs(pixel1->intensity - pixel2 ->intensity);
+    edge->weight = edgeDifferenceFunction(pixel1, pixel2);
     edge->n1 = pixel1;
     edge->n2 = pixel2;
     return edge;
 }
 
-void mergeComponents(Component* x, Component* y, double MSTMaxEdgeValue){
+void mergeComponents(Component* x, Component* y,const double MSTMaxEdgeValue){
     if (x != y) {
         ComponentStruct* componentStruct;
         if (x->rank < y->rank) {
@@ -254,11 +271,9 @@ void mergeComponents(Component* x, Component* y, double MSTMaxEdgeValue){
             componentStruct = y->parentComponentStruct;
             delete y;
         }
-        //if the previousComponentStruct is not a nullptr
         if(componentStruct->previousComponentStruct){
             componentStruct->previousComponentStruct->nextComponentStruct = componentStruct->nextComponentStruct;
         }
-        //if the nextComponentStruct is not a nullptr
         if(componentStruct->nextComponentStruct){
             componentStruct->nextComponentStruct->previousComponentStruct = componentStruct->previousComponentStruct;
         }
@@ -269,7 +284,7 @@ void mergeComponents(Component* x, Component* y, double MSTMaxEdgeValue){
 
 #### Explanation:
 1. `makeComponent` creates a component with a single element(pixel). As you will see in utils.cpp, that initially each pixel is part of a separate component. 
-2. `createEdge` creates an Edge object using two Pixel Object pointers and sets weight as the absolute difference between the pixel intensities.
+2. `createEdge` creates an Edge object using two Pixel Object pointers and sets weight depending on the colorSpace given. If we are comparing rgb differences then `edgeDifferenceFunction` is `rgbPixelDifference` euclidean difference of rgb values) otherwise it is `grayPixelDifference`(absolute difference between the pixel intensities).
 3. `mergeComponents` has multi-fold operations. If Component A is merged into Component B (rank(A) < rank(B)):
     - Sets A's representative _parent_ as B's representative. 
     - Add's all the pixels A to the pixels of the component B
@@ -281,23 +296,61 @@ void mergeComponents(Component* x, Component* y, double MSTMaxEdgeValue){
 **utils.h**
 {% highlight cpp %}
 int getSingleIndex(const int row, const int col, const int totalColumns);
-int getEdgeArraySize(const int rows, const int columns);
-std::vector<Edge*>& setEdges(const cv::Mat &img, const std::vector<Pixel *> &pixels, std::vector<Edge*> &edges);
+int getEdgeArraySize(const int rows,const int columns);
+std::vector<Edge *> setEdges(const std::vector<Pixel *> &pixels, std::string colorSpace, int rows, int columns);
 bool compareEdges(const Edge* e1,const Edge* e2);
 cv::Mat addColorToSegmentation(const ComponentStruct* componentStruct, int rows, int columns);
-std::vector<Pixel *>& constructImageGraph(const cv::Mat& img, std::vector<Pixel *> &pixels, int rows, int columns);
+std::string getFileNameFromPath(const std::string &path);
+void printParameters(const std::string &inputPath, const std::string &outputDir, const std::string &color,
+                     const float sigma, const float k, const int minimumComponentSize);
+std::vector<Pixel *> constructImagePixels(const cv::Mat &img, int rows, int columns);
 {% endhighlight %}
 
 **utils.cpp**
 {% highlight cpp %}
-#include <opencv2/opencv.hpp>
+#include <string>
+#include <iostream>
+#include <functional>
 #include <vector>
 #include <cstdlib>
+#include <opencv2/opencv.hpp>
 #include "DisjointForest.h"
-#include <string>
 
-int getSingleIndex(const int row,const int col,const int totalColumns){
+
+int getSingleIndex(const int row, const int col, const int totalColumns){
     return (row*totalColumns) + col;
+}
+
+void printParameters(const std::string &inputPath, const std::string &outputDir, const std::string &color,
+        const float sigma, const float k, const int minimumComponentSize){
+    std::cout << "Input Path: " << inputPath << '\n';
+    std::cout << "Output Directory: " << outputDir << '\n';
+    std::cout << "Color Space: " << color << '\n';
+    std::cout << "Sigma: " << sigma << '\n';
+    std::cout << "k: " << k << '\n';
+    std::cout << "Minimum Component Size: " << minimumComponentSize << '\n';
+}
+
+std::vector<std::string> split(const std::string& s, const char separator)
+{
+    std::vector<std::string> output;
+    std::string::size_type prev_pos = 0, pos = 0;
+    while((pos = s.find(separator, pos)) != std::string::npos)
+    {
+        std::string substring( s.substr(prev_pos, pos-prev_pos) );
+        output.push_back(substring);
+        prev_pos = ++pos;
+    }
+    output.push_back(s.substr(prev_pos, pos-prev_pos)); // Last word
+    return output;
+}
+
+std::string getFileNameFromPath(const std::string &path){
+    std::vector<std::string> pathSplit = split(path, '/');
+    std::string fileName = pathSplit[pathSplit.size()-1];
+    std::vector<std::string> fileNameSplit = split(fileName, '.');
+    std::string baseFileName = fileNameSplit[0];
+    return baseFileName;
 }
 
 int getEdgeArraySize(const int rows,const int columns){
@@ -308,8 +361,10 @@ int getEdgeArraySize(const int rows,const int columns){
     return firstColumn + lastColumn + middleValues + lastRow;
 }
 
-std::vector<Pixel *>& constructImageGraph(const cv::Mat& img, std::vector<Pixel *> &pixels, int rows, int columns){
-    Component* firstComponent = makeComponent(0, 0, static_cast<int>(img.at<uchar>(0, 0)));
+std::vector<Pixel *> constructImagePixels(const cv::Mat &img, int rows, int columns){
+    std::vector<Pixel *> pixels(rows*columns);
+
+    Component* firstComponent = makeComponent(0, 0, img.at<cv::Vec3b>(0, 0));
     auto* firstComponentStruct = new ComponentStruct;
     firstComponentStruct->component = firstComponent;
     auto previousComponentStruct = firstComponentStruct;
@@ -319,8 +374,7 @@ std::vector<Pixel *>& constructImageGraph(const cv::Mat& img, std::vector<Pixel 
     {
         for(int column=0; column < columns; column++)
         {
-            int pixelValue = static_cast<int>(img.at<uchar>(row, column));
-            Component* component=makeComponent(row, column, pixelValue);
+            Component* component=makeComponent(row, column, img.at<cv::Vec3b>(row, column));
             auto* newComponentStruct = new ComponentStruct;
             newComponentStruct->component = component;
             newComponentStruct->previousComponentStruct = previousComponentStruct;
@@ -337,32 +391,38 @@ std::vector<Pixel *>& constructImageGraph(const cv::Mat& img, std::vector<Pixel 
     return pixels;
 }
 
-std::vector<Edge *>& setEdges(const const cv::Mat &img,const std::vector<Pixel *> &pixels, std::vector<Edge*> &edges){
-    int rows = img.rows;
-    int columns = img.cols;
+std::vector<Edge *> setEdges(const std::vector<Pixel *> &pixels, const std::string colorSpace, const int rows, const int columns){
+    int edgeArraySize = getEdgeArraySize(rows, columns);
+    std::vector<Edge *> edges(edgeArraySize);
+    std::function<double(Pixel*, Pixel*)> edgeDifferenceFunction;
+    if (colorSpace == "rgb"){
+        edgeDifferenceFunction = rgbPixelDifference;
+    }else{
+        edgeDifferenceFunction = grayPixelDifference;
+    }
     int edgeCount = 0;
-    for(int row=0; row < img.rows; ++row){
-        for(int column=0; column < img.cols; ++column) {
+    for(int row=0; row < rows; ++row){
+        for(int column=0; column < columns; ++column) {
             Pixel* presentPixel = pixels[getSingleIndex(row, column, columns)];
             if(row < rows - 1){
                 if(column == 0){
-                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row, column+1, columns)]);
-                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row+1, column+1, columns)]);
-                    edges[edgeCount++] = createEdge(presentPixel , pixels[getSingleIndex(row+1, column, columns)]);
+                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row, column+1, columns)], edgeDifferenceFunction);
+                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row+1, column+1, columns)], edgeDifferenceFunction);
+                    edges[edgeCount++] = createEdge(presentPixel , pixels[getSingleIndex(row+1, column, columns)], edgeDifferenceFunction);
                 }
                 else if(column==columns-1){
-                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row+1, column, columns)]);
-                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row+1, column-1, columns)]);
+                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row+1, column, columns)], edgeDifferenceFunction);
+                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row+1, column-1, columns)], edgeDifferenceFunction);
                 }else{
-                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row, column+1, columns)]);
-                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row+1, column+1, columns)]);
-                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row+1, column, columns)]);
-                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row+1, column-1, columns)]);
+                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row, column+1, columns)], edgeDifferenceFunction);
+                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row+1, column+1, columns)], edgeDifferenceFunction);
+                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row+1, column, columns)], edgeDifferenceFunction);
+                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row+1, column-1, columns)], edgeDifferenceFunction);
                 }
             }
             else if(row == rows - 1){
                 if(column != columns - 1) {
-                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row,column+1, columns)]);
+                    edges[edgeCount++] = createEdge(presentPixel, pixels[getSingleIndex(row,column+1, columns)], edgeDifferenceFunction);
                 }
             }
         }
@@ -371,11 +431,11 @@ std::vector<Edge *>& setEdges(const const cv::Mat &img,const std::vector<Pixel *
     return edges;
 }
 
-bool compareEdges(const Edge* e1,const Edge* e2){
+bool compareEdges(const Edge* e1, const Edge* e2){
     return e1->weight < e2->weight;
 }
 
-int getRandomNumber(const int min, const int max)
+int getRandomNumber(const int min,const int max)
 {
     //from learncpp.com
     static constexpr double fraction { 1.0 / (RAND_MAX + 1.0) };
@@ -412,7 +472,7 @@ cv::Mat addColorToSegmentation(const ComponentStruct* componentStruct, int rows,
 
 **segmentation.h**
 {% highlight cpp %}
-void segmentImage(const std::vector<Edge *> &edges, int &totalComponents, int minimumComponentSize, float kValue) ;
+void segmentImage(const std::vector<Edge *> &edges, const int &totalComponents, const int minimumComponentSize, const float kValue);
 {% endhighlight %}
 
 **segmentation.cpp**
@@ -421,11 +481,11 @@ void segmentImage(const std::vector<Edge *> &edges, int &totalComponents, int mi
 #include <vector>
 #include "DisjointForest.h"
 
-inline float thresholdFunction(const float componentSize, const float k){
+inline float thresholdFunction(const float componentSize,const float k){
     return k/componentSize;
 }
 
-void segmentImage(const std::vector<Edge *> &edges, int &totalComponents, int minimumComponentSize, float kValue) {
+void segmentImage(const std::vector<Edge *> &edges, int &totalComponents, const int minimumComponentSize,const float kValue) {
     std::cout << "Starting Segmentation:\n";
     Pixel* pixel1;
     Pixel* pixel2;
@@ -450,6 +510,9 @@ void segmentImage(const std::vector<Edge *> &edges, int &totalComponents, int mi
         }
     }
 
+    std::cout << "Segmentation Done\n";
+    std::cout << "Before Post Processing Total Components: " << totalComponents << '\n';
+
 //    post-processing:
     for(Edge* edge: edges){
         pixel1 = edge->n1;
@@ -467,6 +530,7 @@ void segmentImage(const std::vector<Edge *> &edges, int &totalComponents, int mi
 
     std::cout << "After Post Processing Total Components: " << totalComponents << '\n';
 }
+
 {% endhighlight %}
 
 `segmentation.cpp` implements the segmentation algorithm of the paper. Note that the post-processing part of the code ensures that each component is at-least equal to `minimumComponentSize`. If not, it merges two neighboring components.
@@ -487,56 +551,83 @@ Note that the MSTMaxEdge represents the maximum edge for the minimum Spanning Tr
 {% highlight cpp %}
 #include <iostream>
 #include <vector>
+#include <opencv2/opencv.hpp>
 #include <string>
 #include <filesystem>
-#include <opencv2/opencv.hpp>
 #include "DisjointForest.h"
 #include "utils.h"
 #include "segmentation.h"
 
-int main() {
-    float gaussianBlur = 2.5;
-    int minimumComponentSize = 100;
-    float kValue = 850;
-    int flag = cv::IMREAD_GRAYSCALE;
-    
-    std::filesystem::path path = std::filesystem::u8path("images/baseball.png");
+int main(int argc, char* argv[]) {
+    if (argc != 7){
+        std::cout << "Execute: .\\ImageSegment inputImage outputDir colorSpace k(float) sigma(float) minSize(int)\n";
+        std::cout << "Exiting program\n";
+        std::exit(1);
+    }
+    const std::string inputPath =  argv[1];
+    const std::string outputFolder = argv[2];
+    const std::string colorSpace = argv[3];
+
+    float gaussianBlur, kValue;
+    int minimumComponentSize;
+    std::stringstream convert;
+
+    convert << argv[4] << " " << argv[5] << " " << argv[6];
+    if (!(convert >> kValue) || !(convert >> gaussianBlur) || !(convert >> minimumComponentSize)){
+        std::cout << "Execute: .\\ImageSegment inputImage outputDir colorSpace k(float) sigma(float) minSize(int)\n";
+        std::cout << "Something wrong with value k, sigma or minSize, (arguments - 5, 6, 7) \n";
+        std::cout << "Exiting program\n";
+        std::exit(1);
+    }
+    printParameters(inputPath, outputFolder, colorSpace, gaussianBlur, kValue, minimumComponentSize);
+
+    const std::filesystem::path path = std::filesystem::u8path(inputPath);
+    const std::string baseFileName = getFileNameFromPath(inputPath);
+    std::cout << "Filename: " << baseFileName << '\n';
+
     std::srand(static_cast<unsigned int>(std::time(nullptr)));
 
-    cv::Mat img = cv::imread(path, flag);
-    std::cout << img.size() << '\n';
-    //Gaussian filter applie to slightly smooth the image
+    cv::Mat img = cv::imread(path, cv::IMREAD_COLOR);
     cv::GaussianBlur(img, img, cv::Size(3,3), gaussianBlur);
-
     int rows = img.rows;
     int columns = img.cols;
     std::cout << "Rows: " << rows << '\n';
     std::cout << "Columns: " << columns << '\n';
-    std::vector<Pixel *> pixels(rows*columns);
-    int edgeArraySize = getEdgeArraySize(rows, columns);
-    std::vector<Edge *> edges(edgeArraySize);
 
-    pixels = constructImageGraph(img, pixels, rows, columns);
-    edges = setEdges(img, pixels, edges);
+
+    std::vector<Pixel *> pixels = constructImagePixels(img, rows, columns);
+    std::vector<Edge *> edges = setEdges(pixels, colorSpace, rows, columns);
 
     std::cout << "Sorting\n";
     std::sort(edges.begin(), edges.end(), compareEdges);
 
-    int totalComponents = img.rows*img.cols;
+    int totalComponents = rows * columns;
     segmentImage(edges, totalComponents, minimumComponentSize, kValue);
 
-    //get the first componentstruct in the linked list
     auto firstComponentStruct = pixels[0]->parentTree->parentComponentStruct;
     while(firstComponentStruct->previousComponentStruct){
         firstComponentStruct = firstComponentStruct->previousComponentStruct;
     }
-    
+
+    std::string outputPath = outputFolder + baseFileName + "-" + colorSpace + "-k" +
+                             std::to_string(static_cast<int>(kValue)) + '-' + std::to_string(gaussianBlur) +"-"
+                              "min" + std::to_string(static_cast<int>(minimumComponentSize)) + ".jpg";
+
+    std::filesystem::path destinationPath = std::filesystem::u8path(outputPath);
     cv::Mat segmentedImage = addColorToSegmentation(firstComponentStruct, img.rows, img.cols);
+    std::cout << segmentedImage.size() << '\n';
+    std::cout << segmentedImage.rows << '\n';
+    std::cout << segmentedImage.cols<< '\n';
     cv::imshow("Image", segmentedImage);
+    cv::imwrite(destinationPath, segmentedImage);
+    std::cout << "Image saved as: " << outputPath << '\n';
     cv::waitKey(0);
 
     return 0;
 }
+
+//TODO: Fix relative Paths
+
 {% endhighlight %}
 
 #### Explanation:
@@ -551,19 +642,36 @@ Operations of main.cpp in order:
 6. The segmentation algorithm is applied to the edges
 7. The image is colored based on the segmentation results
 
+### Building and execution
+You can run the following commands in any directory, but it is recommended to execute this in the same directory where source is located. Make sure cmake is installed.
+
+{% highlight cpp %}
+mkdir build
+cd build
+cmake ../source
+cmake --build .
+{% endhighlight %}
+
+Execute the program using the folling syntax from the build directory:
+
+{% highlight cpp %}
+.\ImageSegment inputImage outputDir colorSpace k(float) sigma(float) minSize(int)\n";
+{% endhighlight %}
+
 ### Results
 
 ---
-{% include image.html url="https://raw.githubusercontent.com/IamMohitM/Graph-Based-Image-Segmentation/master/images/baseball.png" description=""%}  
-{% include image.html url="https://raw.githubusercontent.com/IamMohitM/Graph-Based-Image-Segmentation/master/Results/baseball-gray-k1000-1.500000-min100.jpg" description="sigma = 1.5, k = 1000, min = 100"%}  
+{% include image.html url="https://raw.githubusercontent.com/IamMohitM/Graph-Based-Image-Segmentation/master/source/images/baseball.png" description="" %}  
+{% include image.html url="https://raw.githubusercontent.com/IamMohitM/Graph-Based-Image-Segmentation/master/source/Results/baseball-gray-k1000-1.500000-min100.jpg" description="sigma = 1.5, k = 1000, min = 100" %}  
+---
+
+---
+{% include image.html url="https://raw.githubusercontent.com/IamMohitM/Graph-Based-Image-Segmentation/master/source/images/chateau-de-chenonceau.jpg" description="" %}  
+{% include image.html url="https://raw.githubusercontent.com/IamMohitM/Graph-Based-Image-Segmentation/master/source/Results/chateau-de-chenonceau-gray-k1000-0.800000-min50.jpg" description="sigma = 0.8, k = 1000, min = 50" %}  
 ---
 ---
-{% include image.html url="https://raw.githubusercontent.com/IamMohitM/Graph-Based-Image-Segmentation/master/images/chateau-de-chenonceau.jpg" description=""%}  
-{% include image.html url="https://raw.githubusercontent.com/IamMohitM/Graph-Based-Image-Segmentation/master/Results/chateau-de-chenonceau-gray-k1000-0.800000-min50.jpg" description="sigma = 0.8, k = 1000, min = 50"%}  
----
----
-{% include image.html url="https://raw.githubusercontent.com/IamMohitM/Graph-Based-Image-Segmentation/master/images/versailles-gardens.jpg" description=""%}  
-{% include image.html url="https://raw.githubusercontent.com/IamMohitM/Graph-Based-Image-Segmentation/master/Results/versailles-gardens-gray-k1000-1.500000-min100.jpg" description="sigma = 1.5, k = 1000, min = 100"%}  
+{% include image.html url="https://raw.githubusercontent.com/IamMohitM/Graph-Based-Image-Segmentation/master/source/images/versailles-gardens.jpg" description="" %}  
+{% include image.html url="https://raw.githubusercontent.com/IamMohitM/Graph-Based-Image-Segmentation/master/source/Results/versailles-gardens-gray-k750-1.000000-min100.jpg" description="sigma = 1.0, k = 750, min = 100" %}  
 ---
 
 There is still some scope of improvement but this is a decent start.
