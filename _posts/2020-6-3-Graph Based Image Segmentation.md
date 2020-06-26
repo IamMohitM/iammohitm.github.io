@@ -7,7 +7,7 @@ title: Implementing Efficient Graph Based Image Segmentation with C++
 This is a summary and my implementation of the research paper [Efficient Graph based Image Segmentation](http://people.cs.uchicago.edu/~pff/papers/seg-ijcv.pdf). To understand the implementation it is recommended to know C++ (pointers, vectors, structs, linked lists, pass by reference and return by reference).
 
 ## What is Image Segmentation?
-Image Segmentation is the process of segmenting an image into sementaic regions, where each region represents a separate object. Quoting wikipedia:
+Image Segmentation is the process of dividing an image into sementaic regions, where each region represents a separate object. Quoting wikipedia:
 
 > More precisely, image segmentation is the process of assigning a label to every pixel in an image such that pixels with the same label share certain characteristics. 
 
@@ -19,7 +19,7 @@ Look at the following examples:
 
 Now this might be a very trivial task for the human brain, but no so easy for the computer. 
 
-There have been a good number of methods in the past to solve this problem but either they were not convincing or were not efficient enough for larger adoption and real world applications. In 2004, Pedro F. Felzenszwalb (MIT) and Daniel P. Huttenlocher (Cornell), published this method to be more effective and efficient compared to previous methods for this problem. We are going to discuss this method in this article. 
+There have been a good number of methods in the past to solve this problem but either they were not convincing or efficient enough for larger adoption and real world applications. In 2004, Pedro F. Felzenszwalb (MIT) and Daniel P. Huttenlocher (Cornell), published this method to be more effective and efficient compared to previous methods for this problem. We are going to discuss this method in this article. 
 
 ## What this particular method aims to achieve?
 
@@ -53,7 +53,7 @@ where $r_p$, $b_p$ and $g_p$ are intensities of red, blue and green channels of 
 
 ## Defining the metrics to measure a boundary between regions
 
-The algorithm merges any two regions if there is no evidence for a bounday between them. And how is this evidence measured? Well there are 4 simple equations to understand:
+The algorithm merges any two Componets(regions) if there is no evidence for a bounday between them. And how is this evidence measured? Well there are 4 simple equations to understand:
 	
 First we need to know the differences within a region:  
 
@@ -151,6 +151,9 @@ I have used a [Disjoint Forest](https://helloacm.com/disjoint-sets/) to represen
 **DisjointForest.h**
 
 {% highlight cpp %}
+//
+// Created by mo on 21/05/20.
+//
 #pragma once
 #include <vector>
 #include <functional>
@@ -190,11 +193,11 @@ struct ComponentStruct{
     ComponentStruct* nextComponentStruct= nullptr;
 };
 
-Edge* createEdge(Pixel* pixel1, Pixel* pixel2,  std::function<double(Pixel*, Pixel*)> edgeDifferenceFunction);
+Edge* createEdge(Pixel* pixel1, Pixel* pixel2, const std::function<double(Pixel*, Pixel*)>& edgeDifferenceFunction);
 double rgbPixelDifference(Pixel* pixel1, Pixel* pixel2);
 double grayPixelDifference(Pixel* pixel1, Pixel* pixel2);
 void mergeComponents(Component* x, Component* y, double MSTMaxEdgeValue);
-Component* makeComponent(const int row, const int column, cv::Vec3b pixelValues);
+Component* makeComponent(const int row, const int column, const cv::Vec3b& pixelValues);
 {% endhighlight %}
 
 {% include image.html url="/images/DisjointForestDataStructure.png" description="Each component is pointed by an element of a linked list which is represented by ComponentStruct. This linked list is necessary to remember the resulting components through out the program." %}
@@ -211,7 +214,8 @@ Component* makeComponent(const int row, const int column, cv::Vec3b pixelValues)
 #include <iostream>
 #include <cmath>
 
-Component* makeComponent(const int row, const int column, cv::Vec3b pixelValues){
+
+Component* makeComponent(const int row, const int column, const cv::Vec3b& pixelValues){
     auto* component = new Component;
     auto* pixel = new Pixel;
     pixel->bValue = pixelValues.val[0];
@@ -244,7 +248,7 @@ double rgbPixelDifference(Pixel* pixel1, Pixel* pixel2){
                 pow(pixel1->gValue- pixel2->gValue, 2));
 }
 
-Edge* createEdge(Pixel* pixel1, Pixel* pixel2,  std::function<double(Pixel*, Pixel*)> edgeDifferenceFunction){
+Edge* createEdge(Pixel* pixel1, Pixel* pixel2, const std::function<double(Pixel*, Pixel*)> &edgeDifferenceFunction){
     Edge* edge = new Edge;
     edge->weight = edgeDifferenceFunction(pixel1, pixel2);
     edge->n1 = pixel1;
@@ -298,7 +302,6 @@ void mergeComponents(Component* x, Component* y,const double MSTMaxEdgeValue){
 int getSingleIndex(const int row, const int col, const int totalColumns);
 int getEdgeArraySize(const int rows,const int columns);
 std::vector<Edge *> setEdges(const std::vector<Pixel *> &pixels, std::string colorSpace, int rows, int columns);
-bool compareEdges(const Edge* e1,const Edge* e2);
 cv::Mat addColorToSegmentation(const ComponentStruct* componentStruct, int rows, int columns);
 std::string getFileNameFromPath(const std::string &path);
 void printParameters(const std::string &inputPath, const std::string &outputDir, const std::string &color,
@@ -431,10 +434,6 @@ std::vector<Edge *> setEdges(const std::vector<Pixel *> &pixels, const std::stri
     return edges;
 }
 
-bool compareEdges(const Edge* e1, const Edge* e2){
-    return e1->weight < e2->weight;
-}
-
 int getRandomNumber(const int min,const int max)
 {
     //from learncpp.com
@@ -442,8 +441,7 @@ int getRandomNumber(const int min,const int max)
     return min + static_cast<int>((max - min + 1) * (std::rand() * fraction));
 }
 
-
-cv::Mat addColorToSegmentation(const ComponentStruct* componentStruct, int rows, int columns){
+cv::Mat addColorToSegmentation(const ComponentStruct* componentStruct, const int rows, const int columns){
     cv::Mat segmentedImage(rows, columns, CV_8UC3);
     do{
         uchar r=getRandomNumber(0, 255);
@@ -472,7 +470,7 @@ cv::Mat addColorToSegmentation(const ComponentStruct* componentStruct, int rows,
 
 **segmentation.h**
 {% highlight cpp %}
-void segmentImage(const std::vector<Edge *> &edges, const int &totalComponents, const int minimumComponentSize, const float kValue);
+void segmentImage(const std::vector<Edge *> &edges, int totalComponents, const int minimumComponentSize, const float kValue);
 {% endhighlight %}
 
 **segmentation.cpp**
@@ -485,7 +483,7 @@ inline float thresholdFunction(const float componentSize,const float k){
     return k/componentSize;
 }
 
-void segmentImage(const std::vector<Edge *> &edges, int &totalComponents, const int minimumComponentSize,const float kValue) {
+void segmentImage(const std::vector<Edge *> &edges, int totalComponents, const int minimumComponentSize, const float kValue) {
     std::cout << "Starting Segmentation:\n";
     Pixel* pixel1;
     Pixel* pixel2;
@@ -589,17 +587,18 @@ int main(int argc, char* argv[]) {
 
     cv::Mat img = cv::imread(path, cv::IMREAD_COLOR);
     cv::GaussianBlur(img, img, cv::Size(3,3), gaussianBlur);
-    int rows = img.rows;
-    int columns = img.cols;
+    const int rows = img.rows;
+    const int columns = img.cols;
     std::cout << "Rows: " << rows << '\n';
     std::cout << "Columns: " << columns << '\n';
-
 
     std::vector<Pixel *> pixels = constructImagePixels(img, rows, columns);
     std::vector<Edge *> edges = setEdges(pixels, colorSpace, rows, columns);
 
     std::cout << "Sorting\n";
-    std::sort(edges.begin(), edges.end(), compareEdges);
+    std::sort(edges.begin(), edges.end(), [] (const Edge* e1, const Edge* e2){
+                                                        return e1->weight < e2->weight;
+                                                        });
 
     int totalComponents = rows * columns;
     segmentImage(edges, totalComponents, minimumComponentSize, kValue);
@@ -614,10 +613,7 @@ int main(int argc, char* argv[]) {
                               "min" + std::to_string(static_cast<int>(minimumComponentSize)) + ".jpg";
 
     std::filesystem::path destinationPath = std::filesystem::u8path(outputPath);
-    cv::Mat segmentedImage = addColorToSegmentation(firstComponentStruct, img.rows, img.cols);
-    std::cout << segmentedImage.size() << '\n';
-    std::cout << segmentedImage.rows << '\n';
-    std::cout << segmentedImage.cols<< '\n';
+    cv::Mat segmentedImage = addColorToSegmentation(firstComponentStruct, rows, columns);
     cv::imshow("Image", segmentedImage);
     cv::imwrite(destinationPath, segmentedImage);
     std::cout << "Image saved as: " << outputPath << '\n';
@@ -625,9 +621,6 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
-
-//TODO: Fix relative Paths
-
 {% endhighlight %}
 
 #### Explanation:
