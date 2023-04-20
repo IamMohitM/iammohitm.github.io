@@ -1,4 +1,7 @@
-# TorchServe with GRPC
+---
+layout: post
+title: TorchServe with GRPC
+---
 
 Created: June 4, 2022 11:27 AM
 

@@ -1,4 +1,7 @@
-# TorchServe with GRPC Secure
+---
+layout: post
+title: TorchServe with GRPC Secure
+---
 
 Created: September 17, 2022 6:06 PM
 
