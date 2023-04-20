@@ -5,11 +5,11 @@ title: TorchServe with GRPC Secure
 
 Created: September 17, 2022 6:06 PM
 
-In the previous [article](https://www.notion.so/TorchServe-with-GRPC-04c5cf2339d141b188cfe8ec95866187), I set out steps to serve a torch model using torchserve and communicate over gRPC. However, the communication between client and the server was over an insecure channel. This may not be an ideal scenario if you are working with any confidential data. This article will set out steps to communicate with torch serve with gRPC over a secure channel.
+In the previous [article](https://iammohitm.github.io/TorchServe-with-gRPC/), I set out steps to serve a torch model using torchserve and communicate over gRPC. However, the communication between client and the server was over an insecure channel. This may not be an ideal scenario if you are working with any confidential data. This article will set out steps to communicate with torch serve with gRPC over a secure channel.
 
 ## Prerequisites
 
-The prerequisite is that you have been through this [article](https://www.notion.so/TorchServe-with-GRPC-04c5cf2339d141b188cfe8ec95866187). Essentially, you should:
+The prerequisite is that you have been through this [article](https://iammohitm.github.io/TorchServe-with-gRPC/). Essentially, you should:
 
 1. Have a .mar file generated
 2. And compiled python output of the torchserve grpc proto files
